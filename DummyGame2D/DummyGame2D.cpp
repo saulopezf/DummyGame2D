@@ -21,6 +21,61 @@ using namespace std;
 
 #include "olcConsoleGameEngine.h"
 
+struct point {
+    float x, y;
+};
+
+struct hitbox {
+    point topLeft;
+    point topRight;
+    point botLeft;
+    point botRight;
+};
+
+class Player {
+private:
+    point position;
+    hitbox box;
+
+    void updateHitbox() {
+        box.topLeft.x = position.x + 0.1f;
+        box.topLeft.y = position.y;
+
+        box.topRight.x = (position.x + 1.0f);
+        box.topRight.y = position.y;
+
+        box.botLeft.x = position.x + 0.1f;
+        box.botLeft.y = (position.y + 0.9f);
+
+        box.botRight.x = (position.x + 1.0f);
+        box.botRight.y = (position.y + 0.9f);
+    }
+
+public:
+    Player(float x, float y) {
+        position.x = x;
+        position.y = y;
+        updateHitbox();
+    }
+
+    void move(float velX, float velY, float elapsedTime) {
+        position.x += velX * elapsedTime;
+        position.y += velY * elapsedTime;
+        updateHitbox();
+    }
+
+    point getPosition() {
+        return position;
+    }
+
+    hitbox getHitbox() {
+        return box;
+    }
+
+};
+
+Player player(0,0);
+
 class OneLoneCoder_Plataformer : public olcConsoleGameEngine {
 public: 
     OneLoneCoder_Plataformer() {
@@ -36,10 +91,6 @@ private:
     // Camera properties
     float cameraPosX = 0.0f;
     float cameraPosY = 0.0f;
-
-    // Player properties
-    float playerPosX = 0.0f;
-    float playerPosY = 0.0f;
 
     float playerVelX = 0.0f;
     float playerVelY = 0.0f;
@@ -113,11 +164,19 @@ protected:
             }
         }
 
-        playerPosX += playerVelX * elapsedTime;
-        playerPosY += playerVelY * elapsedTime;
+        player.move(playerVelX, playerVelY, elapsedTime);
 
-        cameraPosX = playerPosX;
-        cameraPosY = playerPosY;
+        if (
+            getTile(player.getHitbox().topLeft.x, player.getHitbox().topLeft.y) == L'#' ||
+            getTile(player.getHitbox().topRight.x, player.getHitbox().topRight.y) == L'#' ||
+            getTile(player.getHitbox().botLeft.x, player.getHitbox().botLeft.y) == L'#' ||
+            getTile(player.getHitbox().botRight.x, player.getHitbox().botRight.y) == L'#'
+        ) {
+            player.move(-playerVelX, -playerVelY, elapsedTime);
+        }
+
+        cameraPosX = player.getPosition().x;
+        cameraPosY = player.getPosition().y;
 
         // Dibujar nivel
         int tileWidth = 8;
@@ -135,38 +194,42 @@ protected:
         if (offsetX > levelWidth - visibleTilesX) offsetX = levelWidth - visibleTilesX;
         if (offsetY > levelHeight - visibleTilesY) offsetY = levelHeight - visibleTilesY;
 
+        // Obtener los offsets de cada tile para un movimiento mas realista
+        float tileOffsetX = (offsetX - (int)offsetX) * tileWidth;
+        float tileOffsetY = (offsetY - (int)offsetY) * tileWidth;
+
         // Dibujar el mapa
-        for (int x = 0; x < visibleTilesX; x++) {
-            for (int y = 0; y < visibleTilesY; y++) {
+        for (int x = -1; x < visibleTilesX + 1; x++) {
+            for (int y = -1; y < visibleTilesY + 1; y++) {
                 wchar_t tileId = getTile(x + offsetX, y + offsetY);
 
                 switch (tileId) {
                     case L'.':
                         Fill(
-                            x * tileWidth,
-                            y * tileHeight,
-                            (x + 1) * tileWidth,
-                            (y + 1) * tileHeight,
+                            x * tileWidth - tileOffsetX,
+                            y * tileHeight - tileOffsetY,
+                            (x + 1) * tileWidth - tileOffsetX,
+                            (y + 1) * tileHeight - tileOffsetY,
                             PIXEL_SOLID,
                             FG_CYAN
                         );
                         break;
                     case L'#':
                         Fill(
-                            x * tileWidth,
-                            y * tileHeight,
-                            (x + 1) * tileWidth,
-                            (y + 1) * tileHeight,
+                            x * tileWidth - tileOffsetX,
+                            y * tileHeight - tileOffsetY,
+                            (x + 1) * tileWidth - tileOffsetX,
+                            (y + 1) * tileHeight - tileOffsetY,
                             PIXEL_SOLID,
                             FG_RED
                         );
                         break;
                     default:
                         Fill(
-                            x * tileWidth,
-                            y * tileHeight,
-                            (x + 1) * tileWidth,
-                            (y + 1) * tileHeight,
+                            x * tileWidth - tileOffsetX,
+                            y * tileHeight - tileOffsetY,
+                            (x + 1) * tileWidth - tileOffsetX,
+                            (y + 1) * tileHeight - tileOffsetY,
                             PIXEL_SOLID,
                             FG_BLACK
                         );
@@ -176,10 +239,10 @@ protected:
         }
         //Fill(playerPosX * tileWidth, playerPosY * tileHeight, (playerPosX + 1) * tileWidth, (playerPosY + 1) * tileHeight, PIXEL_SOLID, FG_GREEN);
         Fill(
-            (playerPosX - offsetX) * tileWidth,
-            (playerPosY - offsetY) * tileWidth,
-            (playerPosX - offsetX + 1.0f) * tileHeight,
-            (playerPosY - offsetY + 1.0f) * tileHeight,
+            (player.getPosition().x - offsetX) * tileWidth,
+            (player.getPosition().y - offsetY) * tileWidth,
+            (player.getPosition().x - offsetX + 1.0f) * tileHeight,
+            (player.getPosition().y - offsetY + 1.0f) * tileHeight,
             PIXEL_SOLID,
             FG_GREEN
         );
