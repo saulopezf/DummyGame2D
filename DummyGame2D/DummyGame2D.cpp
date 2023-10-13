@@ -1,25 +1,24 @@
-/*
-Bugs durante el desarrollo:
-    1.
-        Problema:
-            Al iniciar el juego habia una franja negra en el top de la pantalla y la camara no se movia en el eje Y.
-
-        Explicacion:
-            Cuando inicializaba visibleTilesY, estaba calculando las tiles visibles con el ancho de la pantalla y no el alto,
-            por lo que hacia que el eje Y del juego tuviese comportamientos extraños (los citados en el problema del bug#1)
-
-        Solucion:
-            Solamente tuve que cambiar ScreenWidth() por ScreenHeight(), esto pasa por copiar y pegar lineas muy parecidas.
-
-                X int visibleTilesY = ScreenWidth() / tileHeight;
-                V int visibleTilesY = ScreenHeight() / tileHeight;
-
-*/
-
 #include <iostream>
+#include <string>
+#include <iostream>
+#include <sstream>
+#include "Windows.h"
 using namespace std;
 
 #include "olcConsoleGameEngine.h"
+
+const float gAccel = 12.0f;
+const float gMaxVel = 12.0f;
+
+const float playerAccel = 12.0f;
+const float playerDecel = 6.0f;
+const float playerMaxVel = 6.0f;
+
+const float jumpForce = 8.5f;
+
+struct velVector {
+    float x, y;
+};
 
 struct point {
     float x, y;
@@ -33,43 +32,32 @@ struct hitbox {
 };
 
 class Player {
-private:
-    point position;
-    hitbox box;
-
-    void updateHitbox() {
-        box.topLeft.x = position.x + 0.1f;
-        box.topLeft.y = position.y;
-
-        box.topRight.x = (position.x + 1.0f);
-        box.topRight.y = position.y;
-
-        box.botLeft.x = position.x + 0.1f;
-        box.botLeft.y = (position.y + 0.9f);
-
-        box.botRight.x = (position.x + 1.0f);
-        box.botRight.y = (position.y + 0.9f);
-    }
-
 public:
+    point position;
+    bool onGround;
+    bool jumping;
+
     Player(float x, float y) {
-        position.x = x;
-        position.y = y;
-        updateHitbox();
+        position = { x, y };
+        onGround = false;
+        jumping = false;
     }
 
-    void move(float velX, float velY, float elapsedTime) {
-        position.x += velX * elapsedTime;
-        position.y += velY * elapsedTime;
-        updateHitbox();
+    void setPosition(float x, float y) {
+        position = { x, y };
     }
 
-    point getPosition() {
-        return position;
+    point nextMove(float velX, float velY, float elapsedTime) {
+        return { position.x + velX * elapsedTime, position.y + velY * elapsedTime };
     }
 
-    hitbox getHitbox() {
-        return box;
+    hitbox getHibox(point pos) {
+        return {
+            {pos.x,pos.y},
+            {pos.x + 1.0f,pos.y},
+            {pos.x,pos.y + 0.9f},
+            {pos.x + 1.0f,pos.y + 0.9f},
+        };
     }
 
 };
@@ -92,8 +80,8 @@ private:
     float cameraPosX = 0.0f;
     float cameraPosY = 0.0f;
 
-    float playerVelX = 0.0f;
-    float playerVelY = 0.0f;
+    float velX = 0.0f;
+    float velY = 0.0f;
 
 protected:
     virtual bool OnUserCreate() {
@@ -103,7 +91,7 @@ protected:
         level += L"................................................................";
         level += L"................................................................";
         level += L"................................................................";
-        level += L".......................########.................................";
+        level += L"......#................########.................................";
         level += L"......................###..............#.#......................";
         level += L"....................###................#.#......................";
         level += L"...................####.........................................";
@@ -138,45 +126,107 @@ protected:
                 level[y * levelWidth + x] = c;
         };
 
+        auto checkCollision = [&](hitbox hitbox) {
+            return getTile(hitbox.topLeft.x, hitbox.topLeft.y) != L'.'
+                or getTile(hitbox.topRight.x, hitbox.topRight.y) != L'.'
+                or getTile(hitbox.botLeft.x, hitbox.botLeft.y) != L'.'
+                or getTile(hitbox.botRight.x, hitbox.botRight.y) != L'.';
+            };
+
+        stringstream a;
+        a << "\nVelocity: " << velX << ", " << velY << "\n";
+        OutputDebugStringA(a.str().c_str());
+        OutputDebugString(player.onGround ? L"true" : L"false");
+
         // Input
-        playerVelX = 0;
-        playerVelY = 0;
-
         if (IsFocused()) {
-            // UP
-            if (GetKey(0x57).bHeld) {
-                playerVelY = -6.0f;
-            }
-
-            // DOWN
-            if (GetKey(0x53).bHeld) {
-                playerVelY = 6.0f;
+            // JUMP
+            if (GetKey(0x57).bPressed && player.onGround) {
+                velY = -jumpForce;
+                player.jumping = true;
+                player.onGround = false;
+                
             }
 
             // LEFT
             if (GetKey(0x41).bHeld) {
-                playerVelX = -6.0f;
+                velX += -playerAccel * elapsedTime;
             }
 
             // RIGHT
             if (GetKey(0x44).bHeld) {
-                playerVelX = 6.0f;
+                velX += playerAccel * elapsedTime;
             }
         }
 
-        player.move(playerVelX, playerVelY, elapsedTime);
+        
+        // Gravity
+        velY += gAccel * elapsedTime;
 
-        if (
-            getTile(player.getHitbox().topLeft.x, player.getHitbox().topLeft.y) == L'#' ||
-            getTile(player.getHitbox().topRight.x, player.getHitbox().topRight.y) == L'#' ||
-            getTile(player.getHitbox().botLeft.x, player.getHitbox().botLeft.y) == L'#' ||
-            getTile(player.getHitbox().botRight.x, player.getHitbox().botRight.y) == L'#'
-        ) {
-            player.move(-playerVelX, -playerVelY, elapsedTime);
+        // Max gravity velocity
+        if (velY > gMaxVel)
+            velY = gMaxVel;
+        // Max X velocity
+        if (abs(velX) > playerMaxVel) {
+            velX = (velX < 0) ? playerMaxVel * -1 : playerMaxVel;
         }
 
-        cameraPosX = player.getPosition().x;
-        cameraPosY = player.getPosition().y;
+        if (player.onGround && velX != 0.0f) {
+            float oldVelX = velX;
+            velX += velX < 0
+                ? (playerDecel * elapsedTime)
+                : (playerDecel * elapsedTime) * -1;
+            if ((oldVelX < 0 && velX > 0) or (oldVelX > 0 && velX < 0)) velX = 0;
+        }
+
+
+        point playerNextMove = player.nextMove(velX, velY, elapsedTime);
+
+        // Horizontal collisions
+        if (velX <= 0) {
+            if (
+                getTile(playerNextMove.x + 0.0f, player.position.y + 0.0f) != L'.' 
+                or getTile(playerNextMove.x + 0.0f, player.position.y + 0.9f) != L'.'
+            ) {
+                playerNextMove.x = (int)playerNextMove.x + 1;
+                velX = 0;
+            }
+        }
+        else {
+            if (getTile(playerNextMove.x + 1.0f, player.position.y + 0.0f) != L'.'
+                or getTile(playerNextMove.x + 1.0f, player.position.y + 0.9f) != L'.'
+            ) {
+                playerNextMove.x = (int)playerNextMove.x;
+                velX = 0;
+            }
+        }
+
+        // Vertical collisions
+        if (velY <= 0) {
+            if (
+                getTile(playerNextMove.x + 0.0f, playerNextMove.y) != L'.' 
+                or getTile(playerNextMove.x + 0.9f, playerNextMove.y) != L'.'
+            ) {
+                playerNextMove.y = (int)playerNextMove.y + 1;
+                velY = 0;
+            }
+        }
+        else {
+            if (
+                getTile(playerNextMove.x + 0.0f, playerNextMove.y + 1.0f) != L'.' 
+                or getTile(playerNextMove.x + 0.9f, playerNextMove.y + 1.0f) != L'.'
+            ) {
+                playerNextMove.y = (int)playerNextMove.y;
+                velY = 0;
+                player.onGround = true;
+            }
+        }
+
+        player.setPosition(playerNextMove.x, playerNextMove.y);
+
+        // Mover la camara con el jugador
+        cameraPosX = player.position.x;
+        cameraPosY = player.position.y;
 
         // Dibujar nivel
         int tileWidth = 8;
@@ -239,10 +289,10 @@ protected:
         }
         //Fill(playerPosX * tileWidth, playerPosY * tileHeight, (playerPosX + 1) * tileWidth, (playerPosY + 1) * tileHeight, PIXEL_SOLID, FG_GREEN);
         Fill(
-            (player.getPosition().x - offsetX) * tileWidth,
-            (player.getPosition().y - offsetY) * tileWidth,
-            (player.getPosition().x - offsetX + 1.0f) * tileHeight,
-            (player.getPosition().y - offsetY + 1.0f) * tileHeight,
+            (player.position.x - offsetX) * tileWidth,
+            (player.position.y - offsetY) * tileWidth,
+            (player.position.x - offsetX + 1.0f) * tileHeight,
+            (player.position.y - offsetY + 1.0f) * tileHeight,
             PIXEL_SOLID,
             FG_GREEN
         );
