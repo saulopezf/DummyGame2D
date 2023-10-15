@@ -83,18 +83,27 @@ private:
     float velX = 0.0f;
     float velY = 0.0f;
 
+    // Sprites
+    olcSprite *spriteMan = nullptr;
+    olcSprite* spriteTiles = nullptr;
+
+    // Flags para las animaciones
+    int sprX = 0;
+    int sprY = 0;
+
+
 protected:
     virtual bool OnUserCreate() {
         levelWidth = 64;
         levelHeight = 16;
         level += L"................................................................";
         level += L"................................................................";
-        level += L"................................................................";
-        level += L"................................................................";
-        level += L"......#................########.................................";
-        level += L"......................###..............#.#......................";
-        level += L"....................###................#.#......................";
-        level += L"...................####.........................................";
+        level += L".......oooo.....................................................";
+        level += L"........oo......................................................";
+        level += L".........................######.................................";
+        level += L".....bb?bb?bb..........####............#.#......................";
+        level += L".....................######............#.#......................";
+        level += L"...................########.....................................";
         level += L"####################################.##############.....########";
         level += L"...................................#.#...............###........";
         level += L"........................############.#............###...........";
@@ -104,6 +113,8 @@ protected:
         level += L"........................#################.......................";
         level += L"................................................................";
 
+        spriteMan = new olcSprite(L"./minijario.spr");
+        spriteTiles = new olcSprite(L"./leveljario.spr");
 
         return true;
     }
@@ -126,11 +137,11 @@ protected:
                 level[y * levelWidth + x] = c;
         };
 
-        auto checkCollision = [&](hitbox hitbox) {
-            return getTile(hitbox.topLeft.x, hitbox.topLeft.y) != L'.'
-                or getTile(hitbox.topRight.x, hitbox.topRight.y) != L'.'
-                or getTile(hitbox.botLeft.x, hitbox.botLeft.y) != L'.'
-                or getTile(hitbox.botRight.x, hitbox.botRight.y) != L'.';
+        auto checkCollision = [&](hitbox hitbox, wchar_t tile) {
+            return getTile(hitbox.topLeft.x, hitbox.topLeft.y) == tile
+                or getTile(hitbox.topRight.x, hitbox.topRight.y) == tile
+                or getTile(hitbox.botLeft.x, hitbox.botLeft.y) == tile
+                or getTile(hitbox.botRight.x, hitbox.botRight.y) == tile;
             };
 
         stringstream a;
@@ -145,20 +156,21 @@ protected:
                 velY = -jumpForce;
                 player.jumping = true;
                 player.onGround = false;
-                
+                sprX = 1;
             }
 
             // LEFT
             if (GetKey(0x41).bHeld) {
                 velX += -playerAccel * elapsedTime;
+                sprY = 1;
             }
 
             // RIGHT
             if (GetKey(0x44).bHeld) {
                 velX += playerAccel * elapsedTime;
+                sprY = 0;
             }
         }
-
         
         // Gravity
         velY += gAccel * elapsedTime;
@@ -179,8 +191,17 @@ protected:
             if ((oldVelX < 0 && velX > 0) or (oldVelX > 0 && velX < 0)) velX = 0;
         }
 
-
         point playerNextMove = player.nextMove(velX, velY, elapsedTime);
+
+        // Coger monedas
+        if (getTile(playerNextMove.x + 0.0f, playerNextMove.y + 0.0f) == L'o')
+            setTile(playerNextMove.x + 0.0f, playerNextMove.y + 0.0f, L'.');
+        if (getTile(playerNextMove.x + 0.0f, playerNextMove.y + 1.0f) == L'o')
+            setTile(playerNextMove.x + 0.0f, playerNextMove.y + 1.0f, L'.');
+        if (getTile(playerNextMove.x + 1.0f, playerNextMove.y + 0.0f) == L'o')
+            setTile(playerNextMove.x + 1.0f, playerNextMove.y + 0.0f, L'.');
+        if (getTile(playerNextMove.x + 1.0f, playerNextMove.y + 1.0f) == L'o')
+            setTile(playerNextMove.x + 1.0f, playerNextMove.y + 1.0f, L'.');
 
         // Horizontal collisions
         if (velX <= 0) {
@@ -219,6 +240,7 @@ protected:
                 playerNextMove.y = (int)playerNextMove.y;
                 velY = 0;
                 player.onGround = true;
+                sprX = 0;
             }
         }
 
@@ -229,8 +251,8 @@ protected:
         cameraPosY = player.position.y;
 
         // Dibujar nivel
-        int tileWidth = 8;
-        int tileHeight = 8;
+        int tileWidth = 16;
+        int tileHeight = 16;
         int visibleTilesX = ScreenWidth() / tileWidth;
         int visibleTilesY = ScreenHeight() / tileHeight;
 
@@ -265,14 +287,48 @@ protected:
                         );
                         break;
                     case L'#':
+                        DrawPartialSprite(
+                            x * tileWidth - tileOffsetX,
+                            y * tileHeight - tileOffsetY,
+                            spriteTiles,
+                            2 * tileWidth,
+                            0 * tileHeight,
+                            tileWidth, tileHeight);
+                        break;
+                    case L'b':
+                        DrawPartialSprite(
+                            x * tileWidth - tileOffsetX,
+                            y * tileHeight - tileOffsetY,
+                            spriteTiles,
+                            0 * tileWidth,
+                            1 * tileHeight,
+                            tileWidth, tileHeight);
+                        break;
+                    case L'o':
                         Fill(
                             x * tileWidth - tileOffsetX,
                             y * tileHeight - tileOffsetY,
                             (x + 1) * tileWidth - tileOffsetX,
                             (y + 1) * tileHeight - tileOffsetY,
                             PIXEL_SOLID,
-                            FG_RED
+                            FG_CYAN
                         );
+                        DrawPartialSprite(
+                            x * tileWidth - tileOffsetX,
+                            y * tileHeight - tileOffsetY,
+                            spriteTiles, 
+                            3 * tileWidth,
+                            0 * tileHeight,
+                            tileWidth, tileHeight);
+                        break;
+                    case L'?':
+                        DrawPartialSprite(
+                            x * tileWidth - tileOffsetX,
+                            y * tileHeight - tileOffsetY,
+                            spriteTiles,
+                            1 * tileWidth,
+                            1 * tileHeight,
+                            tileWidth, tileHeight);
                         break;
                     default:
                         Fill(
@@ -287,15 +343,22 @@ protected:
                 }
             }
         }
-        //Fill(playerPosX * tileWidth, playerPosY * tileHeight, (playerPosX + 1) * tileWidth, (playerPosY + 1) * tileHeight, PIXEL_SOLID, FG_GREEN);
-        Fill(
+        //Fill(
+        //    (player.position.x - offsetX) * tileWidth,
+        //    (player.position.y - offsetY) * tileWidth,
+        //    (player.position.x - offsetX + 1.0f) * tileHeight,
+        //    (player.position.y - offsetY + 1.0f) * tileHeight,
+        //    PIXEL_SOLID,
+        //    FG_GREEN
+        //);
+        DrawPartialSprite(
             (player.position.x - offsetX) * tileWidth,
             (player.position.y - offsetY) * tileWidth,
-            (player.position.x - offsetX + 1.0f) * tileHeight,
-            (player.position.y - offsetY + 1.0f) * tileHeight,
-            PIXEL_SOLID,
-            FG_GREEN
-        );
+            spriteMan,
+            sprX * tileWidth,
+            sprY * tileHeight, 
+            tileWidth, tileHeight);
+
 
         return true;
     }
@@ -304,7 +367,7 @@ protected:
 int main()
 {
     OneLoneCoder_Plataformer game;
-    if (game.ConstructConsole(160, 120, 8, 8))
+    if (game.ConstructConsole(256, 240, 4, 4))
         game.Start();
 
     return 0;
