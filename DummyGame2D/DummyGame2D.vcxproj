@@ -128,9 +128,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="DummyGame2D.cpp" />
+    <ClCompile Include="Player.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="olcConsoleGameEngine.h" />
+    <ClInclude Include="Player.h" />
+    <ClInclude Include="Utils.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

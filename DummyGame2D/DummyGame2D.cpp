@@ -1,68 +1,11 @@
 #include <iostream>
 #include <string>
-#include <iostream>
-#include <sstream>
-#include "Windows.h"
-using namespace std;
 
 #include "olcConsoleGameEngine.h"
+#include "Utils.h"
+#include "Player.h"
 
-const float gAccel = 12.0f;
-const float gMaxVel = 12.0f;
-
-const float playerAccel = 12.0f;
-const float playerDecel = 6.0f;
-const float playerMaxVel = 6.0f;
-
-const float jumpForce = 8.5f;
-
-struct velVector {
-    float x, y;
-};
-
-struct point {
-    float x, y;
-};
-
-struct hitbox {
-    point topLeft;
-    point topRight;
-    point botLeft;
-    point botRight;
-};
-
-class Player {
-public:
-    point position;
-    bool onGround;
-    bool jumping;
-
-    Player(float x, float y) {
-        position = { x, y };
-        onGround = false;
-        jumping = false;
-    }
-
-    void setPosition(float x, float y) {
-        position = { x, y };
-    }
-
-    point nextMove(float velX, float velY, float elapsedTime) {
-        return { position.x + velX * elapsedTime, position.y + velY * elapsedTime };
-    }
-
-    hitbox getHibox(point pos) {
-        return {
-            {pos.x,pos.y},
-            {pos.x + 1.0f,pos.y},
-            {pos.x,pos.y + 0.9f},
-            {pos.x + 1.0f,pos.y + 0.9f},
-        };
-    }
-
-};
-
-Player player(0,0);
+using namespace std;
 
 class OneLoneCoder_Plataformer : public olcConsoleGameEngine {
 public: 
@@ -80,9 +23,6 @@ private:
     float cameraPosX = 0.0f;
     float cameraPosY = 0.0f;
 
-    float velX = 0.0f;
-    float velY = 0.0f;
-
     // Sprites
     olcSprite *spriteMan = nullptr;
     olcSprite* spriteTiles = nullptr;
@@ -90,6 +30,8 @@ private:
     // Flags para las animaciones
     int sprX = 0;
     int sprY = 0;
+
+    Player player = Player(0, 0);
 
 
 protected:
@@ -144,16 +86,11 @@ protected:
                 or getTile(hitbox.botRight.x, hitbox.botRight.y) == tile;
             };
 
-        stringstream a;
-        a << "\nVelocity: " << velX << ", " << velY << "\n";
-        OutputDebugStringA(a.str().c_str());
-        OutputDebugString(player.onGround ? L"true" : L"false");
-
         // Input
         if (IsFocused()) {
             // JUMP
             if (GetKey(0x57).bPressed && player.onGround) {
-                velY = -jumpForce;
+                player.velocity.y = -jumpForce;
                 player.jumping = true;
                 player.onGround = false;
                 sprX = 1;
@@ -161,37 +98,39 @@ protected:
 
             // LEFT
             if (GetKey(0x41).bHeld) {
-                velX += -playerAccel * elapsedTime;
+                player.velocity.x += -playerAccel * elapsedTime;
                 sprY = 1;
             }
 
             // RIGHT
             if (GetKey(0x44).bHeld) {
-                velX += playerAccel * elapsedTime;
+                player.velocity.x += playerAccel * elapsedTime;
                 sprY = 0;
             }
         }
         
         // Gravity
-        velY += gAccel * elapsedTime;
+        player.velocity.y += gAccel * elapsedTime;
 
         // Max gravity velocity
-        if (velY > gMaxVel)
-            velY = gMaxVel;
+        if (player.velocity.y > gMaxVel)
+            player.velocity.y = gMaxVel;
+
         // Max X velocity
-        if (abs(velX) > playerMaxVel) {
-            velX = (velX < 0) ? playerMaxVel * -1 : playerMaxVel;
+        if (abs(player.velocity.x) > playerMaxVel) {
+            player.velocity.x = (player.velocity.x < 0) ? playerMaxVel * -1 : playerMaxVel;
         }
 
-        if (player.onGround && velX != 0.0f) {
-            float oldVelX = velX;
-            velX += velX < 0
+        // Deceleracion cuando estas en el suelo
+        if (player.onGround && player.velocity.x != 0.0f) {
+            float oldVelX = player.velocity.x;
+            player.velocity.x += player.velocity.x < 0
                 ? (playerDecel * elapsedTime)
                 : (playerDecel * elapsedTime) * -1;
-            if ((oldVelX < 0 && velX > 0) or (oldVelX > 0 && velX < 0)) velX = 0;
+            if ((oldVelX < 0 && player.velocity.x > 0) or (oldVelX > 0 && player.velocity.x < 0)) player.velocity.x = 0;
         }
 
-        point playerNextMove = player.nextMove(velX, velY, elapsedTime);
+        point playerNextMove = player.nextMove(elapsedTime);
 
         // Coger monedas
         if (getTile(playerNextMove.x + 0.0f, playerNextMove.y + 0.0f) == L'o')
@@ -204,13 +143,13 @@ protected:
             setTile(playerNextMove.x + 1.0f, playerNextMove.y + 1.0f, L'.');
 
         // Horizontal collisions
-        if (velX <= 0) {
+        if (player.velocity.x <= 0) {
             if (
                 getTile(playerNextMove.x + 0.0f, player.position.y + 0.0f) != L'.' 
                 or getTile(playerNextMove.x + 0.0f, player.position.y + 0.9f) != L'.'
             ) {
                 playerNextMove.x = (int)playerNextMove.x + 1;
-                velX = 0;
+                player.velocity.x = 0;
             }
         }
         else {
@@ -218,18 +157,18 @@ protected:
                 or getTile(playerNextMove.x + 1.0f, player.position.y + 0.9f) != L'.'
             ) {
                 playerNextMove.x = (int)playerNextMove.x;
-                velX = 0;
+                player.velocity.x = 0;
             }
         }
 
         // Vertical collisions
-        if (velY <= 0) {
+        if (player.velocity.y <= 0) {
             if (
                 getTile(playerNextMove.x + 0.0f, playerNextMove.y) != L'.' 
                 or getTile(playerNextMove.x + 0.9f, playerNextMove.y) != L'.'
             ) {
                 playerNextMove.y = (int)playerNextMove.y + 1;
-                velY = 0;
+                player.velocity.y = 0;
             }
         }
         else {
@@ -238,7 +177,7 @@ protected:
                 or getTile(playerNextMove.x + 0.9f, playerNextMove.y + 1.0f) != L'.'
             ) {
                 playerNextMove.y = (int)playerNextMove.y;
-                velY = 0;
+                player.velocity.y = 0;
                 player.onGround = true;
                 sprX = 0;
             }
@@ -343,14 +282,6 @@ protected:
                 }
             }
         }
-        //Fill(
-        //    (player.position.x - offsetX) * tileWidth,
-        //    (player.position.y - offsetY) * tileWidth,
-        //    (player.position.x - offsetX + 1.0f) * tileHeight,
-        //    (player.position.y - offsetY + 1.0f) * tileHeight,
-        //    PIXEL_SOLID,
-        //    FG_GREEN
-        //);
         DrawPartialSprite(
             (player.position.x - offsetX) * tileWidth,
             (player.position.y - offsetY) * tileWidth,
